@@ -144,7 +144,7 @@
         if (!db[currentUser]) db[currentUser] = {};
         
         if (selected.length === 0) {
-            db[currentUser][date] = '';
+            db[currentUser][date] = [''];
         } else {
             db[currentUser][date] = selected;
         }
