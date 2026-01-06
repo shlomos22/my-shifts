@@ -64,7 +64,11 @@
     </div>
 
     <div id="entry" class="view active">
-		<h3 id="selectedDateTitle" style="margin-bottom: 10px; color: #444;"></h3>
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; gap: 10px;">
+			<button onclick="changeDay(-1)" class="tab-btn" style="flex: 0; padding: 5px 15px;">▶</button>
+			<h3 id="selectedDateTitle" style="color: #1a73e8; margin: 0; font-size: 1.1em; flex: 1; text-align: center;"></h3>
+			<button onclick="changeDay(1)" class="tab-btn" style="flex: 0; padding: 5px 15px;">◀</button>
+		</div>
 		<input type="hidden" id="datePicker" onchange="loadShiftsForDate()">
 
         <div class="shift-options" style="margin-top:15px;">
@@ -224,6 +228,23 @@
 		const dateObj = new Date(dateStr);
 		const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
 		document.getElementById('selectedDateTitle').innerText = dateObj.toLocaleDateString('he-IL', options);
+	}
+	
+	// פונקציה למעבר בין ימים
+	function changeDay(diff) {
+		const currentPicker = document.getElementById('datePicker');
+		const currentDate = new Date(currentPicker.value);
+		
+		// הוספה או הפחתה של יום
+		currentDate.setDate(currentDate.getDate() + diff);
+		
+		// המרה חזרה לפורמט YYYY-MM-DD
+		const newDateStr = currentDate.toISOString().split('T')[0];
+		
+		// עדכון הממשק
+		currentPicker.value = newDateStr;
+		updateDateTitle(newDateStr);
+		loadShiftsForDate();
 	}
 
 	// פונקציית עזר למעבר בין חודשים
