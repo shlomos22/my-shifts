@@ -100,7 +100,7 @@
 </div>
 
 <script>
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxbcIldDiIu2jFZF14mpj4j1QkpIWqvoU7bGh_6lXgQMMIQsbFdhVHSV5gbSpzB_AL-/exec"; 
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxqDA5B-igoIjMx1l-LSzlefxO_VAxNSrh4O5ozN1EySsWNDmMwUcT-wn98SnTLKNp2/exec"; 
     
     // הגנה ראשונית: אתחול האובייקט עם כל המשתמשים
     let db = JSON.parse(localStorage.getItem('multiUserShifts')) || { "אבא": {}, "יאיר": {}, "עמיחי": {} };
@@ -147,19 +147,24 @@
 	function loadShiftsForDate() {
 		const date = document.getElementById('datePicker').value;
 		const userObj = db[currentUser] || {};
-		const saved = userObj[date] || [];
+		let savedData = userObj[date];
 		
+		let regularShifts = [];
 		let noteValue = "";
-		const regularShifts = [];
 
-		// הפרדת ההערה מהמשמרות הרגילות
-		saved.forEach(s => {
-			if (typeof s === 'string' && s.startsWith("NOTE:")) {
-				noteValue = s.substring(5);
-			} else {
-				regularShifts.push(s);
-			}
-		});
+		// בדיקה האם המידע שמור כמערך (ישן) או כאובייקט (חדש)
+		if (Array.isArray(savedData)) {
+			savedData.forEach(s => {
+				if (typeof s === 'string' && s.startsWith("NOTE:")) {
+					noteValue = s.substring(5);
+				} else {
+					regularShifts.push(s);
+				}
+			});
+		} else if (savedData) {
+			regularShifts = savedData.status || [];
+			noteValue = savedData.note || "";
+		}
 		
 		document.querySelectorAll('input[name="shift"]').forEach(cb => {
 			cb.checked = regularShifts.includes(cb.value);
@@ -174,41 +179,28 @@
 		const date = document.getElementById('datePicker').value;
 		const selected = Array.from(document.querySelectorAll('input[name="shift"]:checked')).map(cb => cb.value);
 		
-		// שליפת ההערה והוספתה למערך במידה וקיימת
 		const noteElement = document.getElementById('dailyNote');
 		const noteText = noteElement ? noteElement.value.trim() : "";
-		if (noteText !== "") {
-			selected.push("NOTE:" + noteText);
-		}
 		
 		if (!db[currentUser]) db[currentUser] = {};
 		
-		if (selected.length === 0) {
-			db[currentUser][date] = [''];
-		} else {
-			db[currentUser][date] = selected;
+		// שומרים את המשמרות וההערה כאובייקט חדש במקום כמערך
+		db[currentUser][date] = {
+			status: selected,
+			note: noteText
+		};
+		
+		localStorage.setItem('multiUserShifts', JSON.stringify(db));
+		renderCalendar();
+		
+		document.getElementById('syncStatus').innerText = "מסנכרן לענן...";
+		try {
+			await fetch(WEB_APP_URL, { method: "POST", mode: "no-cors", body: JSON.stringify(db) });
+			document.getElementById('syncStatus').innerText = "נשמר וסונכרן!";
+		} catch (e) {
+			document.getElementById('syncStatus').innerText = "נשמר מקומית בלבד";
 		}
-        
-        //// יצירת הנתיב במידה ואינו קיים לפני הכנסת הנתון
-        //if (!db[currentUser]) db[currentUser] = {};
-        //
-        //if (selected.length === 0) {
-        //    db[currentUser][date] = [''];
-        //} else {
-        //    db[currentUser][date] = selected;
-        //}
-        
-        localStorage.setItem('multiUserShifts', JSON.stringify(db));
-        renderCalendar();
-        
-        document.getElementById('syncStatus').innerText = "מסנכרן לענן...";
-        try {
-            await fetch(WEB_APP_URL, { method: "POST", mode: "no-cors", body: JSON.stringify(db) });
-            document.getElementById('syncStatus').innerText = "נשמר וסונכרן!";
-        } catch (e) {
-            document.getElementById('syncStatus').innerText = "נשמר מקומית בלבד";
-        }
-    }
+	}
 
     async function pullFromSheets() {
 		try {
@@ -324,18 +316,30 @@
 
 		for (let i = 1; i <= daysInMonth; i++) {
 			const dStr = `${year}-${month}-${String(i).padStart(2, '0')}`;
-			const shifts = userShifts[dStr] || [];
+			let savedData = userShifts[dStr];
 			const isToday = dStr === today ? 'today' : '';
-			let tags = shifts.map(s => {
-				if (typeof s === 'string' && s.startsWith("NOTE:")) {
-					const text = s.substring(5);
-					// מוסיף אימוג'י קטן ואת הטקסט, ובנוסף tool-tip בריחוף עכבר
-					return `<span class="shift-tag tag-note" title="${text}">📝 ${text}</span>`;
-				}
-				return `<span class="shift-tag tag-${s}">${s}</span>`;
-			}).join('');
 			
-			// יצירת אלמנט התא כדי שנוכל להוסיף לו לחיצה
+			let shifts = [];
+			let noteText = "";
+
+			// קריאה נכונה גם לנתונים מהקאש (מערך) וגם לנתונים מהענן (אובייקט)
+			if (Array.isArray(savedData)) {
+				shifts = savedData.filter(s => typeof s !== 'string' || !s.startsWith("NOTE:"));
+				let noteObj = savedData.find(s => typeof s === 'string' && s.startsWith("NOTE:"));
+				if (noteObj) noteText = noteObj.substring(5);
+			} else if (savedData) {
+				shifts = savedData.status || [];
+				noteText = savedData.note || "";
+			}
+
+			// יצירת תגיות המשמרות
+			let tags = shifts.map(s => `<span class="shift-tag tag-${s}">${s}</span>`).join('');
+			
+			// הוספת תגית הערה במידה וקיימת
+			if (noteText) {
+				tags += `<span class="shift-tag tag-note" title="${noteText}">📝 ${noteText}</span>`;
+			}
+			
 			const cell = document.createElement('div');
 			cell.className = `day-cell ${isToday}`;
 			cell.style.cursor = 'pointer';
