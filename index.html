@@ -36,6 +36,7 @@
         .tag-מחלה { background-color: #4caf50; }
         .today { border: 2px solid #1a73e8; background-color: #f0f7ff; }
 		.day-cell:hover { background-color: #f8f9fa; border-color: #1a73e8; }
+		.tag-note { background-color: #607d8b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 95%; }
     </style>
 	<link rel="icon" type="image/jpeg" href="icon.jpeg">
 	<link rel="apple-touch-icon" href="icon.jpeg">
@@ -77,6 +78,9 @@
             <label class="option"><input type="checkbox" name="shift" value="חופש"> 🏖️ חופש</label>
             <label class="option"><input type="checkbox" name="shift" value="מחלה"> 🤒 מחלה</label>
         </div>
+		<div style="margin-top: 15px; margin-bottom: 15px;">
+			<input type="text" id="dailyNote" placeholder="הערה יומית (אופציונלי)..." style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ddd; font-size: 16px; box-sizing: border-box;">
+		</div>
         <button class="save-btn" onclick="saveAndSync()">💾 שמור וסנכרן</button>
         <button class="pull-btn" onclick="pullFromSheets()">🔄 רענן מהענן</button>
     </div>
@@ -96,7 +100,7 @@
 </div>
 
 <script>
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxqDA5B-igoIjMx1l-LSzlefxO_VAxNSrh4O5ozN1EySsWNDmMwUcT-wn98SnTLKNp2/exec"; 
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxbcIldDiIu2jFZF14mpj4j1QkpIWqvoU7bGh_6lXgQMMIQsbFdhVHSV5gbSpzB_AL-/exec"; 
     
     // הגנה ראשונית: אתחול האובייקט עם כל המשתמשים
     let db = JSON.parse(localStorage.getItem('multiUserShifts')) || { "אבא": {}, "יאיר": {}, "עמיחי": {} };
@@ -129,29 +133,70 @@
         renderCalendar();
     }
 
-    function loadShiftsForDate() {
-        const date = document.getElementById('datePicker').value;
-        // שימוש ב-Optional Chaining או בדיקה ידנית למניעת קריסה
-        const userObj = db[currentUser] || {};
-        const saved = userObj[date] || [];
-        
-        document.querySelectorAll('input[name="shift"]').forEach(cb => {
-            cb.checked = saved.includes(cb.value);
-        });
-    }
+    //function loadShiftsForDate() {
+    //    const date = document.getElementById('datePicker').value;
+    //    // שימוש ב-Optional Chaining או בדיקה ידנית למניעת קריסה
+    //    const userObj = db[currentUser] || {};
+    //    const saved = userObj[date] || [];
+    //    
+    //    document.querySelectorAll('input[name="shift"]').forEach(cb => {
+    //        cb.checked = saved.includes(cb.value);
+    //    });
+    //}
+	
+	function loadShiftsForDate() {
+		const date = document.getElementById('datePicker').value;
+		const userObj = db[currentUser] || {};
+		const saved = userObj[date] || [];
+		
+		let noteValue = "";
+		const regularShifts = [];
+
+		// הפרדת ההערה מהמשמרות הרגילות
+		saved.forEach(s => {
+			if (typeof s === 'string' && s.startsWith("NOTE:")) {
+				noteValue = s.substring(5);
+			} else {
+				regularShifts.push(s);
+			}
+		});
+		
+		document.querySelectorAll('input[name="shift"]').forEach(cb => {
+			cb.checked = regularShifts.includes(cb.value);
+		});
+		
+		// עדכון שדה הטקסט של ההערה
+		const noteElement = document.getElementById('dailyNote');
+		if(noteElement) noteElement.value = noteValue;
+	}
 
     async function saveAndSync() {
-        const date = document.getElementById('datePicker').value;
-        const selected = Array.from(document.querySelectorAll('input[name="shift"]:checked')).map(cb => cb.value);
+		const date = document.getElementById('datePicker').value;
+		const selected = Array.from(document.querySelectorAll('input[name="shift"]:checked')).map(cb => cb.value);
+		
+		// שליפת ההערה והוספתה למערך במידה וקיימת
+		const noteElement = document.getElementById('dailyNote');
+		const noteText = noteElement ? noteElement.value.trim() : "";
+		if (noteText !== "") {
+			selected.push("NOTE:" + noteText);
+		}
+		
+		if (!db[currentUser]) db[currentUser] = {};
+		
+		if (selected.length === 0) {
+			db[currentUser][date] = [''];
+		} else {
+			db[currentUser][date] = selected;
+		}
         
-        // יצירת הנתיב במידה ואינו קיים לפני הכנסת הנתון
-        if (!db[currentUser]) db[currentUser] = {};
-        
-        if (selected.length === 0) {
-            db[currentUser][date] = [''];
-        } else {
-            db[currentUser][date] = selected;
-        }
+        //// יצירת הנתיב במידה ואינו קיים לפני הכנסת הנתון
+        //if (!db[currentUser]) db[currentUser] = {};
+        //
+        //if (selected.length === 0) {
+        //    db[currentUser][date] = [''];
+        //} else {
+        //    db[currentUser][date] = selected;
+        //}
         
         localStorage.setItem('multiUserShifts', JSON.stringify(db));
         renderCalendar();
@@ -281,7 +326,14 @@
 			const dStr = `${year}-${month}-${String(i).padStart(2, '0')}`;
 			const shifts = userShifts[dStr] || [];
 			const isToday = dStr === today ? 'today' : '';
-			let tags = shifts.map(s => `<span class="shift-tag tag-${s}">${s}</span>`).join('');
+			let tags = shifts.map(s => {
+				if (typeof s === 'string' && s.startsWith("NOTE:")) {
+					const text = s.substring(5);
+					// מוסיף אימוג'י קטן ואת הטקסט, ובנוסף tool-tip בריחוף עכבר
+					return `<span class="shift-tag tag-note" title="${text}">📝 ${text}</span>`;
+				}
+				return `<span class="shift-tag tag-${s}">${s}</span>`;
+			}).join('');
 			
 			// יצירת אלמנט התא כדי שנוכל להוסיף לו לחיצה
 			const cell = document.createElement('div');
