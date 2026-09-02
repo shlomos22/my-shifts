@@ -187,19 +187,17 @@
 		const noteElement = document.getElementById('dailyNote');
 		if(noteElement) noteElement.value = noteValue;
 
-		// שליפת המשימה של המשתמש הנבחר מגיליון 2 והצגתה בתיבה הראשית
 		document.getElementById('userTaskHeader').innerText = `משימות עבור ${currentUser}:`;
-		document.getElementById('userTaskContent').innerHTML = "טוען משימות מגיליון 2...";
+		document.getElementById('userTaskContent').innerHTML = "טוען משימות...";
 
 		try {
 			const response = await fetch(`${WEB_APP_URL}?action=getSheet2&date=${encodeURIComponent(date)}`);
 			const data = await response.json();
 			
-			// בדיקה אם קיימת משימה למשתמש בגיליון 2
 			if (data && data[currentUser]) {
-				document.getElementById('userTaskContent').innerHTML = data[currentUser];
+				// הפיכת מספרי הטלפון לקישורים לחיצים
+				document.getElementById('userTaskContent').innerHTML = makePhoneNumbersClickable(data[currentUser]);
 			} else {
-				// תצוגת ברירת מחדל מגיליון 1 במידה ואין נתונים בגיליון 2
 				updateUserTasksDisplay(regularShifts, noteValue);
 			}
 		} catch (e) {
@@ -312,9 +310,10 @@
 
 			if (isSheet2Format) {
 				for (let tech in data) {
+					let taskText = data[tech] || 'אין משימות מוגדרות';
 					html += `<div class="tech-item">
 						<div class="tech-name">${tech}</div>
-						<div>${data[tech]}</div>
+						<div>${makePhoneNumbersClickable(taskText)}</div>
 					</div>`;
 				}
 			} else {
@@ -323,15 +322,16 @@
 				
 				if (targetDayData) {
 					for (let user in targetDayData) {
-						let uName = (user === 'משה') ? 'אבא' : user;
+						let uName = user;
 						let uData = targetDayData[user];
 						let shifts = (uData.status && Array.isArray(uData.status)) ? uData.status.join(', ') : '';
 						let note = uData.note || '';
 						let combined = [shifts, note].filter(Boolean).join(' - ');
-
+						
+						let taskText = data[tech] || 'אין משימות מוגדרות';
 						html += `<div class="tech-item">
-							<div class="tech-name">${uName}</div>
-							<div>${combined || 'אין משימות'}</div>
+							<div class="tech-name">${tech}</div>
+							<div>${makePhoneNumbersClickable(taskText)}</div>
 						</div>`;
 					}
 				} else {
@@ -444,6 +444,20 @@
 		updateDateTitle(dateStr);
 		loadShiftsForDate();
 		showTab('entry');
+	}
+	
+	function makePhoneNumbersClickable(text) {
+		if (!text) return "";
+		
+		// ביטוי רגולרי מעודכן המזהה ניידים/נייחים (עם/בלי מקפים, וגם עם רווחים)
+		// מזהה פורמטים כגון: 0522388777, 052-2388777, 052 2388777, 026543210 וכדומה
+		const phoneRegex = /(?:0[23489]|05[0-9])[\s-]?\d{3}[\s-]?\d{4}|\b05\d{8}\b|\b0[23489]\d{7}\b/g;
+		
+		return text.replace(phoneRegex, function(phone) {
+			// ניקוי תווים שאינם ספרות כדי לבנות קישור tel: תקין לחיוג
+			const cleanNumber = phone.replace(/\D/g, '');
+			return `<a href="tel:${cleanNumber}" style="color: #1a73e8; font-weight: bold; text-decoration: underline; dir: ltr; display: inline-block;">${phone}</a>`;
+		});
 	}
 </script>
 </body>
