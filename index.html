@@ -99,7 +99,7 @@
         <button class="save-btn" onclick="saveAndSync()">💾 שמור וסנכרן</button>
         <button class="pull-btn" onclick="pullFromSheets()">🔄 רענן מהענן</button>
         
-        <button class="all-tech-btn" onclick="openAllTechniciansModal()">📋 הצג את כל הטכנאים והמשימות (גיליון 2)</button>
+        <button class="all-tech-btn" onclick="openAllTechniciansModal()">📋 הצג את כל הטכנאים והמשימות</button>
     </div>
 
     <div id="calendar" class="view">
@@ -159,7 +159,7 @@
         renderCalendar();
     }
 	
-	function loadShiftsForDate() {
+	async function loadShiftsForDate() {
 		const date = document.getElementById('datePicker').value;
 		const userObj = db[currentUser] || {};
 		let savedData = userObj[date];
@@ -187,23 +187,40 @@
 		const noteElement = document.getElementById('dailyNote');
 		if(noteElement) noteElement.value = noteValue;
 
-        updateUserTasksDisplay(regularShifts, noteValue);
+		// שליפת המשימה של המשתמש הנבחר מגיליון 2 והצגתה בתיבה הראשית
+		document.getElementById('userTaskHeader').innerText = `משימות עבור ${currentUser}:`;
+		document.getElementById('userTaskContent').innerHTML = "טוען משימות מגיליון 2...";
+
+		try {
+			const response = await fetch(`${WEB_APP_URL}?action=getSheet2&date=${encodeURIComponent(date)}`);
+			const data = await response.json();
+			
+			// בדיקה אם קיימת משימה למשתמש בגיליון 2
+			if (data && data[currentUser]) {
+				document.getElementById('userTaskContent').innerHTML = data[currentUser];
+			} else {
+				// תצוגת ברירת מחדל מגיליון 1 במידה ואין נתונים בגיליון 2
+				updateUserTasksDisplay(regularShifts, noteValue);
+			}
+		} catch (e) {
+			updateUserTasksDisplay(regularShifts, noteValue);
+		}
 	}
 
-    function updateUserTasksDisplay(shifts, note) {
-        document.getElementById('userTaskHeader').innerText = `משימות עבור ${currentUser}:`;
-        let text = "";
-        if (shifts.length > 0) {
-            text += `<b>משמרות/סטטוס:</b> ${shifts.join(', ')}<br>`;
-        }
-        if (note) {
-            text += `<b>הערה/משימה:</b> ${note}`;
-        }
-        if (!shifts.length && !note) {
-            text = "אין משימות או משמרות מוגדרות ליום זה.";
-        }
-        document.getElementById('userTaskContent').innerHTML = text;
-    }
+	function updateUserTasksDisplay(shifts, note) {
+		document.getElementById('userTaskHeader').innerText = `משימות עבור ${currentUser}:`;
+		let text = "";
+		if (shifts.length > 0) {
+			text += `<b>משמרות/סטטוס:</b> ${shifts.join(', ')}<br>`;
+		}
+		if (note) {
+			text += `<b>הערה/משימה:</b> ${note}`;
+		}
+		if (!shifts.length && !note) {
+			text = "אין משימות או משמרות מוגדרות ליום זה.";
+		}
+		document.getElementById('userTaskContent').innerHTML = text;
+	}
 
     async function saveAndSync() {
 		const date = document.getElementById('datePicker').value;
