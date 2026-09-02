@@ -24,6 +24,7 @@
         button { width: 100%; padding: 15px; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 10px; }
         .save-btn { background: #28a745; color: white; }
         .pull-btn { background: #6c757d; color: white; font-size: 14px; padding: 10px; }
+        .all-tech-btn { background: #007bff; color: white; font-size: 15px; padding: 12px; margin-top: 10px; }
         .status-bar { font-size: 13px; color: #1a73e8; margin-bottom: 10px; min-height: 18px; font-weight: bold; }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
         .day-header { font-weight: bold; font-size: 12px; color: #777; }
@@ -37,6 +38,15 @@
         .today { border: 2px solid #1a73e8; background-color: #f0f7ff; }
 		.day-cell:hover { background-color: #f8f9fa; border-color: #1a73e8; }
 		.tag-note { background-color: #607d8b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 95%; }
+
+        /* עיצוב המשימות היומיות והחלונית הצפה */
+        .user-tasks-card { background: #eef4ff; border: 1px solid #b6d4fe; border-radius: 12px; padding: 12px; margin-top: 10px; text-align: right; }
+        .user-tasks-title { font-weight: bold; color: #0d6efd; margin-bottom: 5px; font-size: 14px; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; width: 90%; max-width: 400px; max-height: 80vh; border-radius: 15px; padding: 20px; overflow-y: auto; text-align: right; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative; }
+        .close-modal-btn { position: absolute; top: 10px; left: 10px; background: #e4e6eb; border: none; border-radius: 50%; width: 30px; height: 30px; font-size: 16px; cursor: pointer; font-weight: bold; color: #333; line-height: 30px; padding: 0; text-align: center; }
+        .tech-item { border-bottom: 1px solid #eee; padding: 10px 0; }
+        .tech-name { font-weight: bold; color: #1a73e8; margin-bottom: 3px; }
     </style>
 	<link rel="icon" type="image/jpeg" href="icon.jpeg">
 	<link rel="apple-touch-icon" href="icon.jpeg">
@@ -72,6 +82,11 @@
 		</div>
 		<input type="hidden" id="datePicker" onchange="loadShiftsForDate()">
 
+        <div id="userDailyTasks" class="user-tasks-card">
+            <div class="user-tasks-title" id="userTaskHeader">משימות עבור המשתמש:</div>
+            <div id="userTaskContent" style="font-size: 14px; color: #333;">טוען...</div>
+        </div>
+
         <div class="shift-options" style="margin-top:15px;">
             <label class="option"><input type="checkbox" name="shift" value="יום"> ☀️ יום</label>
             <label class="option"><input type="checkbox" name="shift" value="לילה"> 🌙 לילה</label>
@@ -83,6 +98,8 @@
 		</div>
         <button class="save-btn" onclick="saveAndSync()">💾 שמור וסנכרן</button>
         <button class="pull-btn" onclick="pullFromSheets()">🔄 רענן מהענן</button>
+        
+        <button class="all-tech-btn" onclick="openAllTechniciansModal()">📋 הצג את כל הטכנאים והמשימות (גיליון 2)</button>
     </div>
 
     <div id="calendar" class="view">
@@ -99,10 +116,19 @@
     </div>
 </div>
 
+<!-- מודאל/חלונית צפה הניתנת לסגירה בקלות -->
+<div id="techModal" class="modal-overlay" onclick="closeAllTechniciansModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <button class="close-modal-btn" onclick="closeAllTechniciansModal()">✕</button>
+        <h3 style="margin-top:0; color:#1a73e8; padding-left: 25px;" id="modalDateTitle">משימות כל הטכנאים</h3>
+        <div id="modalTechList">בטעינה...</div>
+        <button class="pull-btn" style="margin-top:15px; width:100%;" onclick="closeAllTechniciansModal()">סגור</button>
+    </div>
+</div>
+
 <script>
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxqDA5B-igoIjMx1l-LSzlefxO_VAxNSrh4O5ozN1EySsWNDmMwUcT-wn98SnTLKNp2/exec"; 
     
-    // הגנה ראשונית: אתחול האובייקט עם כל המשתמשים
     let db = JSON.parse(localStorage.getItem('multiUserShifts')) || { "אבא": {}, "יאיר": {}, "עמיחי": {} };
     let currentUser = localStorage.getItem('lastUser') || "אבא";
 
@@ -116,7 +142,7 @@
         document.getElementById('monthView').value = `${y}-${m}`;
         document.getElementById('userSelector').value = currentUser;
         
-        // טעינה בטוחה של הממשק
+        updateDateTitle(`${y}-${m}-${d}`);
         refreshAll();
         pullFromSheets();
     };
@@ -132,17 +158,6 @@
         loadShiftsForDate();
         renderCalendar();
     }
-
-    //function loadShiftsForDate() {
-    //    const date = document.getElementById('datePicker').value;
-    //    // שימוש ב-Optional Chaining או בדיקה ידנית למניעת קריסה
-    //    const userObj = db[currentUser] || {};
-    //    const saved = userObj[date] || [];
-    //    
-    //    document.querySelectorAll('input[name="shift"]').forEach(cb => {
-    //        cb.checked = saved.includes(cb.value);
-    //    });
-    //}
 	
 	function loadShiftsForDate() {
 		const date = document.getElementById('datePicker').value;
@@ -152,7 +167,6 @@
 		let regularShifts = [];
 		let noteValue = "";
 
-		// בדיקה האם המידע שמור כמערך (ישן) או כאובייקט (חדש)
 		if (Array.isArray(savedData)) {
 			savedData.forEach(s => {
 				if (typeof s === 'string' && s.startsWith("NOTE:")) {
@@ -170,10 +184,26 @@
 			cb.checked = regularShifts.includes(cb.value);
 		});
 		
-		// עדכון שדה הטקסט של ההערה
 		const noteElement = document.getElementById('dailyNote');
 		if(noteElement) noteElement.value = noteValue;
+
+        updateUserTasksDisplay(regularShifts, noteValue);
 	}
+
+    function updateUserTasksDisplay(shifts, note) {
+        document.getElementById('userTaskHeader').innerText = `משימות עבור ${currentUser}:`;
+        let text = "";
+        if (shifts.length > 0) {
+            text += `<b>משמרות/סטטוס:</b> ${shifts.join(', ')}<br>`;
+        }
+        if (note) {
+            text += `<b>הערה/משימה:</b> ${note}`;
+        }
+        if (!shifts.length && !note) {
+            text = "אין משימות או משמרות מוגדרות ליום זה.";
+        }
+        document.getElementById('userTaskContent').innerHTML = text;
+    }
 
     async function saveAndSync() {
 		const date = document.getElementById('datePicker').value;
@@ -184,7 +214,6 @@
 		
 		if (!db[currentUser]) db[currentUser] = {};
 		
-		// שומרים את המשמרות וההערה כאובייקט חדש במקום כמערך
 		db[currentUser][date] = {
 			status: selected,
 			note: noteText
@@ -192,11 +221,12 @@
 		
 		localStorage.setItem('multiUserShifts', JSON.stringify(db));
 		renderCalendar();
+        updateUserTasksDisplay(selected, noteText);
 		
 		document.getElementById('syncStatus').innerText = "מסנכרן לענן...";
 		try {
 			await fetch(WEB_APP_URL, { method: "POST", mode: "no-cors", body: JSON.stringify(db) });
-			document.getElementById('syncStatus').innerText = "נשמר וסונכרן!";
+			document.getElementById('syncStatus').innerText = "סונכרן: " + currentUser;
 		} catch (e) {
 			document.getElementById('syncStatus').innerText = "נשמר מקומית בלבד";
 		}
@@ -210,10 +240,8 @@
 			
 			let newDb = {};
 			
-			// פונקציה פנימית לניקוי תאריך למחרוזת של 10 תווים
 			const fixDate = (d) => {
 				if (!d) return "";
-				// אם זה פורמט Mon Jan... או ISO מלא, נחלץ רק את התאריך
 				const dateObj = new Date(d);
 				if (!isNaN(dateObj.getTime())) {
 					return dateObj.toISOString().split('T')[0];
@@ -226,11 +254,9 @@
 				
 				for (let user in dataByDate[dateKey]) {
 					const u = user.trim();
-					
 					if (!newDb[u]) {
 						newDb[u] = {};
 					}
-					
 					newDb[u][cleanDate] = dataByDate[dateKey][user];
 				}
 			}
@@ -249,6 +275,63 @@
 		}
 	}
 
+    // שליפת נתונים מרוכזת ומעובדת רק ליום הנוכחי
+    async function openAllTechniciansModal() {
+		const currentDate = document.getElementById('datePicker').value;
+		document.getElementById('modalDateTitle').innerText = `משימות טכנאים - ${currentDate}`;
+		document.getElementById('modalTechList').innerHTML = "טוען נתונים...";
+		document.getElementById('techModal').style.display = 'flex';
+
+		try {
+			const fetchUrl = `${WEB_APP_URL}?action=getSheet2&date=${encodeURIComponent(currentDate)}`;
+			const response = await fetch(fetchUrl);
+			const data = await response.json();
+			
+			let html = "";
+			
+			// בדיקה אם קיבלנו תשובה מגיליון 2 (מילון שטוח של שם-טכנאי => משימה)
+			const firstKey = Object.keys(data)[0];
+			const isSheet2Format = firstKey && typeof data[firstKey] === 'string';
+
+			if (isSheet2Format) {
+				for (let tech in data) {
+					html += `<div class="tech-item">
+						<div class="tech-name">${tech}</div>
+						<div>${data[tech]}</div>
+					</div>`;
+				}
+			} else {
+				// אם השרת החזיר בטעות את גיליון 1, נציג רק את התאריך הספציפי שנבחר בלבד!
+				const targetDayData = data[currentDate];
+				
+				if (targetDayData) {
+					for (let user in targetDayData) {
+						let uName = (user === 'משה') ? 'אבא' : user;
+						let uData = targetDayData[user];
+						let shifts = (uData.status && Array.isArray(uData.status)) ? uData.status.join(', ') : '';
+						let note = uData.note || '';
+						let combined = [shifts, note].filter(Boolean).join(' - ');
+
+						html += `<div class="tech-item">
+							<div class="tech-name">${uName}</div>
+							<div>${combined || 'אין משימות'}</div>
+						</div>`;
+					}
+				} else {
+					html = "<div style='padding:15px; color:#666;'>אין משימות רשומות לתאריך זה.</div>";
+				}
+			}
+			
+			document.getElementById('modalTechList').innerHTML = html;
+		} catch (e) {
+			document.getElementById('modalTechList').innerHTML = "שגיאה בטעינת נתונים";
+		}
+	}
+
+    function closeAllTechniciansModal() {
+        document.getElementById('techModal').style.display = 'none';
+    }
+
     function showTab(tabId) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -260,31 +343,25 @@
         }
     }
 
-	// פונקציה לעדכון הכותרת של התאריך שנבחר
 	function updateDateTitle(dateStr) {
 		const dateObj = new Date(dateStr);
 		const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
 		document.getElementById('selectedDateTitle').innerText = dateObj.toLocaleDateString('he-IL', options);
 	}
 	
-	// פונקציה למעבר בין ימים
 	function changeDay(diff) {
 		const currentPicker = document.getElementById('datePicker');
 		const currentDate = new Date(currentPicker.value);
 		
-		// הוספה או הפחתה של יום
 		currentDate.setDate(currentDate.getDate() + diff);
 		
-		// המרה חזרה לפורמט YYYY-MM-DD
 		const newDateStr = currentDate.toISOString().split('T')[0];
 		
-		// עדכון הממשק
 		currentPicker.value = newDateStr;
 		updateDateTitle(newDateStr);
 		loadShiftsForDate();
 	}
 
-	// פונקציית עזר למעבר בין חודשים
 	function changeMonth(diff) {
 		const monthInput = document.getElementById('monthView');
 		const [year, month] = monthInput.value.split('-').map(Number);
@@ -296,7 +373,6 @@
 		renderCalendar();
 	}
 
-	// עדכון פונקציית renderCalendar כדי להוסיף לחיצה על יום
 	function renderCalendar() {
 		const monthVal = document.getElementById('monthView').value;
 		if (!monthVal) return;
@@ -322,7 +398,6 @@
 			let shifts = [];
 			let noteText = "";
 
-			// קריאה נכונה גם לנתונים מהקאש (מערך) וגם לנתונים מהענן (אובייקט)
 			if (Array.isArray(savedData)) {
 				shifts = savedData.filter(s => typeof s !== 'string' || !s.startsWith("NOTE:"));
 				let noteObj = savedData.find(s => typeof s === 'string' && s.startsWith("NOTE:"));
@@ -332,10 +407,8 @@
 				noteText = savedData.note || "";
 			}
 
-			// יצירת תגיות המשמרות
 			let tags = shifts.map(s => `<span class="shift-tag tag-${s}">${s}</span>`).join('');
 			
-			// הוספת תגית הערה במידה וקיימת
 			if (noteText) {
 				tags += `<span class="shift-tag tag-note" title="${noteText}">📝 ${noteText}</span>`;
 			}
@@ -349,26 +422,11 @@
 		}
 	}
 
-	// פונקציה שנקראת כשלוחצים על יום בלוח
 	function selectDateFromCalendar(dateStr) {
 		document.getElementById('datePicker').value = dateStr;
 		updateDateTitle(dateStr);
 		loadShiftsForDate();
-		showTab('entry'); // מעבר למסך העדכון
-	}
-
-	// עדכון פונקציית ה-window.onload
-	const originalOnload = window.onload;
-	window.onload = function() {
-		originalOnload();
-		updateDateTitle(document.getElementById('datePicker').value);
-	};
-
-	// פונקציה חדשה שמעבירה טאב ומעדכנת תאריך
-	function goToDate(dateString) {
-		document.getElementById('datePicker').value = dateString; // עדכון התאריך בבוחר
-		loadShiftsForDate(); // טעינת הצ'קבוקסים של אותו יום
-		showTab('entry');    // מעבר ללשונית עדכון
+		showTab('entry');
 	}
 </script>
 </body>
